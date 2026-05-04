@@ -34,6 +34,26 @@
           dataVolume:
             name: "{{ compute_instance_name }}-root-disk"
 
+- name: Build multi-NIC configuration if networkAttachments is set
+  ansible.builtin.set_fact:
+    vm_network_interfaces: "{{ vm_network_interfaces | default([]) + [{'name': 'net' ~ idx, 'bridge': {}}] }}"
+    vm_networks: "{{ vm_networks | default([]) + [{'name': 'net' ~ idx, 'multus': {'networkName': item.subnetRef}}] }}"
+  loop: "{{ compute_instance.spec.networkAttachments | default([]) }}"
+  loop_control:
+    index_var: idx
+  when: compute_instance.spec.networkAttachments is defined and compute_instance.spec.networkAttachments | length > 0
+
+- name: Apply multi-NIC configuration to template spec
+  ansible.builtin.set_fact:
+    vm_template_spec: "{{ vm_template_spec | combine(network_patch, recursive=True) }}"
+  vars:
+    network_patch:
+      domain:
+        devices:
+          interfaces: "{{ vm_network_interfaces }}"
+      networks: "{{ vm_networks }}"
+  when: vm_network_interfaces is defined and vm_network_interfaces | length > 0
+
 - name: Add GPU passthrough device to template spec if required
   ansible.builtin.set_fact:
     vm_template_spec: "{{ vm_template_spec | combine(gpu_patch, recursive=True, list_merge='append') }}"
