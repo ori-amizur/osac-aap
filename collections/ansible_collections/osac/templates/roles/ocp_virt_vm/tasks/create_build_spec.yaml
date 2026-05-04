@@ -45,7 +45,7 @@
 
 - name: Apply multi-NIC configuration to template spec
   ansible.builtin.set_fact:
-    vm_template_spec: "{{ vm_template_spec | combine(network_patch, recursive=True) }}"
+    vm_template_spec: "{{ vm_template_spec | combine(network_patch, recursive=True, list_merge='replace') }}"
   vars:
     network_patch:
       domain:
