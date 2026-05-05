@@ -37,7 +37,7 @@
 - name: Build multi-NIC configuration if networkAttachments is set
   ansible.builtin.set_fact:
     vm_network_interfaces: "{{ vm_network_interfaces | default([]) + [{'name': 'net' ~ idx, 'bridge': {}}] }}"
-    vm_networks: "{{ vm_networks | default([]) + [{'name': 'net' ~ idx, 'multus': {'networkName': item.subnetRef ~ '/' ~ item.subnetRef}}] }}"
+    vm_networks: "{{ vm_networks | default([]) + [{'name': 'net' ~ idx, 'multus': {'networkName': item.subnetRef}}] }}"
   loop: "{{ compute_instance.spec.networkAttachments | default([]) }}"
   loop_control:
     index_var: idx
