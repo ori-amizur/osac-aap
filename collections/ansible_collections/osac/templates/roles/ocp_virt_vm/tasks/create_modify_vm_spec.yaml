@@ -1,4 +1,48 @@
 ---
-- name: Modify VM spec (no-op by default; override step to customize vm_template_spec)
+- name: Check if subnet target namespace is set (indicates subnet-based networking)
+  ansible.builtin.set_fact:
+    has_subnet_network: "{{ (compute_instance.metadata.annotations['osac.openshift.io/subnet-target-namespace'] | default('')) | length > 0 }}"
+
+- name: Configure subnet-based networking if applicable
+  when: has_subnet_network | bool
+  block:
+  - name: Get subnet target namespace for network attachment
+    ansible.builtin.set_fact:
+      subnet_namespace: "{{ compute_instance.metadata.annotations['osac.openshift.io/subnet-target-namespace'] }}"
+
+  - name: Get primary subnet reference
+    ansible.builtin.set_fact:
+      primary_subnet_ref: >-
+        {{
+          compute_instance.spec.subnetRef | default('') if (compute_instance.spec.subnetRef | default('')) | length > 0
+          else (compute_instance.spec.networkAttachments[0].subnetRef if (compute_instance.spec.networkAttachments | default([]) | length > 0) else '')
+        }}
+
+  - name: Fail if primary subnet reference is missing
+    ansible.builtin.fail:
+      msg: "Subnet target namespace annotation is set but no primary subnet reference found in spec"
+    when: primary_subnet_ref | length == 0
+
+  - name: Replace default pod network with subnet NetworkAttachmentDefinition
+    ansible.builtin.set_fact:
+      vm_template_spec: "{{ vm_template_spec | combine(subnet_network_patch, recursive=True) }}"
+    vars:
+      subnet_network_patch:
+        domain:
+          devices:
+            interfaces:
+              - name: default
+                bridge: {}
+        networks:
+          - name: default
+            multus:
+              networkName: "{{ subnet_namespace }}/{{ primary_subnet_ref }}"
+
+  - name: Log subnet network configuration
+    ansible.builtin.debug:
+      msg: "Configured VM to use subnet network: {{ subnet_namespace }}/{{ primary_subnet_ref }}"
+
+- name: Keep default pod networking when no subnet is specified
+  when: not (has_subnet_network | bool)
   ansible.builtin.debug:
-    msg: "Modify VM spec step (no-op). Override create_step_modify_vm_spec_override to customize."
+    msg: "Using default pod networking (no subnet specified)"
