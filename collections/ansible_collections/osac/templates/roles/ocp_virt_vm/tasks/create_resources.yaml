@@ -86,6 +86,43 @@
     index_var: idx
   when: vm_additional_disks | length > 0
 
+- name: Extract security group references from networkAttachments
+  ansible.builtin.set_fact:
+    all_security_group_refs: >-
+      {{
+        compute_instance.spec.networkAttachments | default([])
+        | map(attribute='securityGroupRefs', default=[])
+        | flatten
+        | unique
+      }}
+
+- name: Build security group labels
+  ansible.builtin.set_fact:
+    security_group_labels: >-
+      {{
+        all_security_group_refs
+        | map('regex_replace', '^(.*)$', 'osac.io/security-group-\1')
+        | zip_longest([], fillvalue='')
+        | items2dict
+      }}
+  when: all_security_group_refs | length > 0
+
+- name: Initialize security group labels if empty
+  ansible.builtin.set_fact:
+    security_group_labels: {}
+  when: all_security_group_refs | default([]) | length == 0
+
+- name: Combine default labels with security group labels
+  ansible.builtin.set_fact:
+    vm_labels: "{{ default_vm_labels | combine(security_group_labels) }}"
+
+- name: Log VM labels
+  ansible.builtin.debug:
+    msg:
+      - "Default VM labels: {{ default_vm_labels }}"
+      - "Security group labels: {{ security_group_labels }}"
+      - "Combined VM labels: {{ vm_labels }}"
+
 - name: Create VirtualMachine
   kubernetes.core.k8s:
     kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
@@ -96,12 +133,12 @@
       metadata:
         name: "{{ compute_instance_name }}"
         namespace: "{{ compute_instance_target_namespace }}"
-        labels: "{{ default_vm_labels }}"
+        labels: "{{ vm_labels }}"
       spec:
         runStrategy: "{{ vm_run_strategy }}"
         template:
           metadata:
-            labels: "{{ default_vm_labels }}"
+            labels: "{{ vm_labels }}"
           spec: "{{ vm_template_spec }}"
     state: present
 
