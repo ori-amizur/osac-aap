@@ -100,10 +100,9 @@
   ansible.builtin.set_fact:
     security_group_labels: >-
       {{
-        all_security_group_refs
-        | map('regex_replace', '^(.*)$', 'osac.io/security-group-\1')
-        | zip_longest([], fillvalue='')
-        | items2dict
+        dict(all_security_group_refs
+             | map('regex_replace', '^(.*)$', 'osac.io/security-group-\1')
+             | zip_longest([], fillvalue=''))
       }}
   when: all_security_group_refs | length > 0
 
