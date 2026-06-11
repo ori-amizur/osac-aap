@@ -84,42 +84,6 @@
     index_var: idx
   when: vm_additional_disks | length > 0
 
-- name: Extract allocated IP for pre-set annotation
-  ansible.builtin.set_fact:
-    vm_allocated_ip: "{{ (compute_instance.metadata.annotations | default({})).get('osac.openshift.io/allocated-ip', '') }}"
-    vm_allocated_cidr_prefix: "{{ (compute_instance.metadata.annotations | default({})).get('osac.openshift.io/allocated-cidr-prefix', '') }}"
-    vm_allocated_gateway: "{{ (compute_instance.metadata.annotations | default({})).get('osac.openshift.io/allocated-gateway', '') }}"
-    vm_cudn_network_name: "{{ (compute_instance.metadata.annotations | default({})).get('osac.openshift.io/cudn-network-name', '') }}"
-
-- name: Build pod-networks annotation for pre-set IP
-  ansible.builtin.set_fact:
-    vm_pod_template_annotations: >-
-      {{
-        {
-          'k8s.ovn.org/pod-networks': ({
-            compute_instance_target_namespace ~ '/' ~ vm_cudn_network_name: {
-              'ip_addresses': [vm_allocated_ip ~ '/' ~ vm_allocated_cidr_prefix],
-              'mac_address': '0a:58:%02x:%02x:%02x:%02x' | format(
-                vm_allocated_ip.split('.')[0] | int,
-                vm_allocated_ip.split('.')[1] | int,
-                vm_allocated_ip.split('.')[2] | int,
-                vm_allocated_ip.split('.')[3] | int
-              ),
-              'gateway_ips': [vm_allocated_gateway],
-              'ip_address': vm_allocated_ip ~ '/' ~ vm_allocated_cidr_prefix,
-              'gateway_ip': vm_allocated_gateway,
-              'role': 'primary'
-            }
-          }) | to_json
-        }
-      }}
-  when: vm_allocated_ip | length > 0
-
-- name: Set empty annotations when no allocated IP
-  ansible.builtin.set_fact:
-    vm_pod_template_annotations: {}
-  when: vm_allocated_ip | length == 0
-
 - name: Create VirtualMachine
   kubernetes.core.k8s:
     kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
@@ -136,7 +100,6 @@
         template:
           metadata:
             labels: "{{ default_vm_labels }}"
-            annotations: "{{ vm_pod_template_annotations }}"
           spec: "{{ vm_template_spec }}"
     state: present
 
