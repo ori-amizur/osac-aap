@@ -25,7 +25,7 @@
                 bus: virtio
           interfaces:
             - name: default
-              masquerade: {}
+              bridge: {}
         features:
           smm:
             enabled: true
@@ -76,7 +76,7 @@
                 bus: virtio
           interfaces:
             - name: default
-              masquerade: {}
+              bridge: {}
           tpm: {}
           rng: {}
         features:
