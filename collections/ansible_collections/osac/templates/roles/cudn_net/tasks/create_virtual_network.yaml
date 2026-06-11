@@ -57,8 +57,10 @@
           topology: "Layer2"
           layer2:
             role: "{{ default_layer2_role }}"
-            ipamLifecycle: "{{ default_ipam_lifecycle }}"
             subnets: "{{ cudn_subnets }}"
+            ipam:
+              mode: Enabled
+              lifecycle: "{{ default_ipam_lifecycle }}"
   register: cudn_result
 
 - name: Display CUDN creation result
