@@ -1,6 +1,6 @@
 ---
-# VirtualNetwork deletion - stub implementation
-# No resources to clean up since create.yaml doesn't create any
+# Delete the shared ClusterUserDefinedNetwork for the VirtualNetwork.
+# Must only be called after all subnets (and their namespaces) are deleted.
 
 - name: Include get remote cluster kubeconfig
   ansible.builtin.include_role:
@@ -11,9 +11,27 @@
   ansible.builtin.set_fact:
     vn_name: "{{ virtual_network.metadata.name }}"
 
-- name: Display deletion status
+- name: Display deletion information
   ansible.builtin.debug:
     msg:
-      - "VirtualNetwork '{{ vn_name }}' deletion completed"
-      - "NOTE: No resources were created during VirtualNetwork provisioning"
-      - "Subnet resources (if any) must be deleted separately"
+      - "Deleting shared CUDN for VirtualNetwork '{{ vn_name }}'"
+
+- name: Delete shared ClusterUserDefinedNetwork
+  kubernetes.core.k8s:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    state: absent
+    api_version: k8s.ovn.org/v1
+    kind: ClusterUserDefinedNetwork
+    name: "{{ vn_name }}"
+    wait: true
+    wait_timeout: 300
+  register: cudn_delete_result
+  failed_when:
+    - cudn_delete_result.failed | default(false)
+    - "'NotFound' not in (cudn_delete_result.msg | default(''))"
+
+- name: Display deletion result
+  ansible.builtin.debug:
+    msg:
+      - "Shared CUDN '{{ vn_name }}' deletion completed"
+      - "Changed: {{ cudn_delete_result.changed | default(false) }}"

@@ -1,6 +1,7 @@
 ---
-# VirtualNetwork is a logical grouping - actual network provisioning happens in Subnet
-# This stub logs information and returns success
+# VirtualNetwork creates a shared ClusterUserDefinedNetwork (CUDN) for all subnets
+# The CUDN uses Layer2 topology with IPAM enabled, spanning all subnet namespaces
+# that share the same virtual-network label.
 
 - name: Include get remote cluster kubeconfig
   ansible.builtin.include_role:
@@ -16,17 +17,54 @@
     vn_network_class: "{{ virtual_network.spec.networkClass }}"
     vn_region: "{{ virtual_network.spec.region }}"
     vn_tenant_id: "{{ virtual_network.metadata.annotations['osac.openshift.io/tenant'] | default('') }}"
+    vn_uuid: "{{ virtual_network.metadata.labels['osac.openshift.io/virtualnetwork-uuid'] | default(virtual_network.metadata.name) }}"
+
+- name: Build CUDN subnets array
+  ansible.builtin.set_fact:
+    cudn_subnets: >-
+      {{
+        ((vn_ipv4_cidr | length > 0) | ternary([vn_ipv4_cidr], []))
+        + ((vn_ipv6_cidr | length > 0) | ternary([vn_ipv6_cidr], []))
+      }}
 
 - name: Display VirtualNetwork information
   ansible.builtin.debug:
     msg:
-      - "VirtualNetwork '{{ vn_name }}' processed successfully"
-      - "Namespace: {{ vn_namespace }}"
+      - "Creating shared CUDN for VirtualNetwork '{{ vn_name }}'"
+      - "UUID: {{ vn_uuid }}"
       - "NetworkClass: {{ vn_network_class }}"
       - "Region: {{ vn_region }}"
       - "Tenant ID: {{ vn_tenant_id }}"
       - "IPv4 CIDR: {{ vn_ipv4_cidr | default('not configured') }}"
       - "IPv6 CIDR: {{ vn_ipv6_cidr | default('not configured') }}"
-      - ""
-      - "NOTE: VirtualNetwork is a logical grouping"
-      - "Actual network provisioning happens when Subnet resources are created"
+      - "CUDN subnets: {{ cudn_subnets }}"
+
+- name: Create shared ClusterUserDefinedNetwork for VirtualNetwork
+  kubernetes.core.k8s:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    state: present
+    definition:
+      apiVersion: k8s.ovn.org/v1
+      kind: ClusterUserDefinedNetwork
+      metadata:
+        name: "{{ vn_name }}"
+        labels: "{{ default_subnet_labels }}"
+      spec:
+        namespaceSelector:
+          matchLabels:
+            osac.openshift.io/virtual-network: "{{ vn_uuid }}"
+        network:
+          topology: "Layer2"
+          layer2:
+            role: "{{ default_layer2_role }}"
+            ipamLifecycle: "{{ default_ipam_lifecycle }}"
+            subnets: "{{ cudn_subnets }}"
+  register: cudn_result
+
+- name: Display CUDN creation result
+  ansible.builtin.debug:
+    msg:
+      - "Shared CUDN '{{ vn_name }}' created for VirtualNetwork"
+      - "Resource UID: {{ cudn_result.result.metadata.uid | default('N/A') }}"
+      - "Namespace selector: osac.openshift.io/virtual-network={{ vn_uuid }}"
+      - "All subnets in this VirtualNetwork will share this CUDN"
