@@ -59,7 +59,7 @@
         - name: default
           multus:
             networkName: "{{ vm_cudn_nad_name }}"
-      autoattachPodInterface: false
+            default: true
       volumes: "{{ root_disk_volume }}"
   when: guest_os_family != 'windows'
 
@@ -114,7 +114,7 @@
         - name: default
           multus:
             networkName: "{{ vm_cudn_nad_name }}"
-      autoattachPodInterface: false
+            default: true
       volumes: "{{ root_disk_volume }}"
   when: guest_os_family == 'windows'
 
