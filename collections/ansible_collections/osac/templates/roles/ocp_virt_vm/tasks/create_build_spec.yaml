@@ -1,4 +1,23 @@
 ---
+- name: Verify CUDN NAD exists in target namespace
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    api_version: k8s.cni.cncf.io/v1
+    kind: NetworkAttachmentDefinition
+    name: "{{ vm_cudn_nad_name }}"
+    namespace: "{{ compute_instance_target_namespace }}"
+  register: nad_lookup
+
+- name: Fail early if CUDN NAD is not found
+  ansible.builtin.assert:
+    that:
+      - nad_lookup.resources | length > 0
+    fail_msg: >-
+      NetworkAttachmentDefinition '{{ vm_cudn_nad_name }}' not found in
+      namespace '{{ compute_instance_target_namespace }}'.
+      Ensure the Subnet '{{ vm_cudn_nad_name }}' has been provisioned
+      and the CUDN is healthy before creating a ComputeInstance.
+
 # Build root disk volume definition (dataVolume)
 - name: Build root disk volume (dataVolume)
   ansible.builtin.set_fact:
@@ -25,7 +44,7 @@
                 bus: virtio
           interfaces:
             - name: default
-              masquerade: {}
+              bridge: {}
         features:
           smm:
             enabled: true
@@ -38,7 +57,9 @@
               spinlocks: 8191
       networks:
         - name: default
-          pod: {}
+          multus:
+            networkName: "{{ vm_cudn_nad_name }}"
+      autoattachPodInterface: false
       volumes: "{{ root_disk_volume }}"
   when: guest_os_family != 'windows'
 
@@ -76,7 +97,7 @@
                 bus: virtio
           interfaces:
             - name: default
-              masquerade: {}
+              bridge: {}
           tpm: {}
           rng: {}
         features:
@@ -91,7 +112,9 @@
               spinlocks: 8192
       networks:
         - name: default
-          pod: {}
+          multus:
+            networkName: "{{ vm_cudn_nad_name }}"
+      autoattachPodInterface: false
       volumes: "{{ root_disk_volume }}"
   when: guest_os_family == 'windows'
 
