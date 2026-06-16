@@ -58,7 +58,7 @@
       networks:
         - name: default
           multus:
-            networkName: "{{ vm_cudn_nad_name }}"
+            networkName: "{{ compute_instance_target_namespace }}/{{ vm_cudn_nad_name }}"
             default: true
       volumes: "{{ root_disk_volume }}"
   when: guest_os_family != 'windows'
@@ -113,7 +113,7 @@
       networks:
         - name: default
           multus:
-            networkName: "{{ vm_cudn_nad_name }}"
+            networkName: "{{ compute_instance_target_namespace }}/{{ vm_cudn_nad_name }}"
             default: true
       volumes: "{{ root_disk_volume }}"
   when: guest_os_family == 'windows'
